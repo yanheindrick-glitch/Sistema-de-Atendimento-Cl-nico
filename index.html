@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <!--Codificação de caracteres, acentos e emojis aparecem sem erros-->
+    <meta charset="UTF-8">
+    <!--Controla o layout em dispositivos móveis-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clínica | Atendimento inteligente</title>
+    <!--CSS que define o visual de todos os elementos das páginas-->
+    <style>
+        /*CSS genérico básico*/
+        .oculto {
+            display: none !important;
+        }
+
+        .autenticacao {
+            width: min(510px, 90vw);
+            margin: 52px auto;
+        }
+
+        body {
+            margin: 0;
+            background: var(--fundo);
+            color: var(--texto);
+            font-family: "Commissioner", sans-serif;
+            font-optical-sizing: auto;
+        }
+
+        .autenticacao .painel {
+            display: block;
+            margin-top: 0;
+        }
+
+        .autenticacao h1 {
+            font-size: 2rem;
+        }
+
+        .troca-autenticacao {
+            margin-top: 18px;
+            text-align: center;
+            color: var(--muted);
+            font-size: .9rem;
+        }
+
+        .troca-autenticacao button {
+            padding: 0;
+            color: var(--ciano);
+            background: transparent;
+        }
+
+        .grid-form {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        label {
+            display: block;
+            color: var(--texto);
+            font-weight: 650;
+            font-size: .88rem;
+        }
+
+        /*CSS dos campos de preenchimento de formulário*/
+        input,
+        textarea,
+        select {
+            display: block;
+            width: 100%;
+            margin-top: 7px;
+            padding: 12px;
+            border: 1px solid #cbd9e5;
+            border-radius: 8px;
+            color: var(--texto);
+            background: white;
+            font: inherit;
+        }
+
+        /*CSS da mensagem de erro*/
+        .mensagem {
+            margin: 16px 0 0;
+            padding: 12px 14px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .mensagem.visivel {
+            display: block;
+        }
+
+        .erro {
+            color: #8d2020;
+            background: #fff0f0;
+        }
+
+        .sucesso {
+            color: #176a45;
+            background: #eaf8f1;
+        }
+
+        /*CSS do cabeçalho*/
+        header {
+            background: var(--branco);
+            border-bottom: 1px solid var(--borda);
+            padding: 22px 5vw;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .marca {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--azul);
+            font-weight: 750;
+            font-size: 1.25rem;
+        }
+
+        .marca span {
+            display: grid;
+            place-items: center;
+            width: 38px;
+            height: 38px;
+            color: white;
+            background: var(--ciano);
+            border-radius: 10px;
+            font-size: 1.4rem;
+        }
+
+        header small {
+            color: var(--muted);
+        }
+
+        /*CSS da tela principal*/
+        main {
+            width: min(1120px, 90vw);
+            margin: 44px auto;
+        }
+    </style>
+</head>
+<!--HTML que cria os elementos das páginas-->
+
+<body>
+    <!--CABEÇALHO-->
+    <header>
+        <div class="marca">Sistema de Atendimento Clínico</div>
+        <div id="usuario-logado" class="usuario-logado oculto">
+            <span id="nome-usuario"></span>
+            <button type="button" id="sair">Sair</button>
+        </div>
+        <small id="subtitulo-cabecalho">Atendimento e Triagem</small>
+    </header>
+    <!--TELA DE LOGIN-->
+    <section id="tela-login" class="autenticacao">
+        <div id="formulario-login" class="painel">
+            <h1>Acesso da Triagem e painel clínico</h1>
+            <p>Insira seu login e senha cadastrados</p>
+            <form id="form-login">
+                <label>Usuário
+                    <input id="login-usuario" autocomplete="username" required>
+                </label>
+                <label>Senha
+                    <input id="login-senha" type="password" autocomplete="current-password" required>
+                </label>
+                <div class="acoes">
+                    <button>Entrar</button>
+                </div>
+            </form>
+            <!--Mensagem de erro (JS)-->
+            <div id="mensagem-login" class="mensagem"></div>
+            <!--OPÇÃO DE CRIAR CONTA-->
+            <p class="link cadastro">Ainda não possui acesso?
+                <button type="Button" id="mostrar-cadastro-login">Criar conta</button>
+            </p>
+        </div>
+        <!--TELA DE CRIAÇÃO DE CONTA-->
+        <div id="tela-criar-conta" class="painel oculto">
+            <h1>Cadastro de acesso</h1>
+            <p>Insira as informações que serão usadas para acessar o sistema</p>
+            <form id="formulario-conta">
+                <label>Nome completo<input id="conta-nome" required></label>
+                <label>Usuário<input id="conta-usuario" autocomplete="username" required></label>
+                <label>Senha<input id="conta-senha" type="password" minlength="4" autocomplete="new-password"
+                        required></label>
+                <label>Perfil
+                    <select id="conta-perfil" required>
+                        <option value="triagem">Triagem</option>
+                        <option value="medico">Médico</option>
+                    </select>
+                </label>
+                <div class="acoes"><button>Criar conta</button></div>
+            </form>
+            <div id="mensagem-conta" class="mensagem"></div>
+            <p class="troca autenticacao">Já possui acesso? <button type="button" id="mostrar-login">Voltar para
+                    login</button></p>
+        </div>
+    </section>
+    <main id="main" class="oculto">
+        <section class="intro">
+            <h1>Painel Principal</h1>
+            <p>Realização de triagem, consulta de dados, cadastro de pacientes e atendimento médico</p>
+        </section>
+    </main>
+
+    <!--Conexão com SUPABASE-->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!--JavaScript que define a parte funcional de cada elemento-->
+    <script>
+        //As contas não são armazenadas em um banco de dados, mas sim no LocalStorage do navegador
+        const CHAVE_USUARIOS = "clinica-usuarios";
+        const CHAVE_SESSAO = "clinica-sessao";
+        //mensagem de erro
+        const mensagem = (id, texto, tipo) => {
+            const elemento = document.getElementById(id);
+            elemento.textContent = texto;
+            elemento.className = `mensagem visivel ${tipo}`;
+        };
+        const aplicarPermissoes = () => { };
+        //Abre a lista no LocalStorage (se estiver vazia, retorna "[]")
+        const lerUsuarios = () => JSON.parse(localStorage.getItem(CHAVE_USUARIOS) || "[]");
+        //Fecha o LocalStorage com uma lista nova e o "JSON.parse" faz o caminho inverso ("JSON.stringify" para transformar uma lista de objetos em texto)
+        const salvarUsuarios = usuarios => localStorage.setItem(CHAVE_USUARIOS, JSON.stringify(usuarios));
+        //função que libera acesso
+        let entrarSistema = usuario => {
+            //registra o usuário atual em uma variável e salva no LocalStorage
+            usuarioAtual = usuario;
+            localStorage.setItem(CHAVE_SESSAO, JSON.stringify(usuario));
+            //esconde a tela de login
+            document.getElementById("tela-login").classList.add("oculto");
+            //mostra a tela principal
+            document.getElementById("main").classList.remove("oculto");
+            //esconde o cabeçalho de usuário logado
+            document.getElementById("usuario-logado").classList.remove("oculto");
+            document.getElementById("nome-usuario").innerHTML = `${usuario.nome}
+         <span class="perfil-usuario">(${usuario.perfil === "medico" ? "Médico" : "Triagem"})</span>`;
+            document.getElementById("subtitulo-cabecalho").textContent = usuario.perfil === "medico" ? "Área médica" : "Área de triagem";
+            aplicarPermissoes();
+        }
+        //função que sai do sistema
+        const sairSistema = () => {
+            //apaga registro de usuário atual e apaga o LocalStorage
+            usuarioAtual = null;
+            localStorage.removeItem(CHAVE_SESSAO);
+            //esconde a área principal
+            document.getElementById("main").classList.add("oculto");
+            //mostra tela de login
+            document.getElementById("usuario-logado").classList.add("oculto");
+            document.getElementById("tela-login").classList.remove("oculto");
+            document.querySelectorAll(".painel").forEach(painel => painel.classList.remove("ativo"));
+            document.getElementById("form-login").reset();
+        }
+        //função que verifica o LocalStorage e chama a função entrarSistema automaticamente para manter o login
+        const sessao = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
+        if (sessao) entrarSistema(sessao);
+        //Realização de Cadastro de usuário
+        document.getElementById("formulario-conta").addEventListener("submit", evento => {
+            evento.preventDefault(); //impede que o site recarregue
+            //Recebe o que foi digitado no campo
+            const nome = document.getElementById("conta-nome").value.trim();
+            const usuario = document.getElementById("conta-usuario").value.trim().toLowerCase();
+            const senha = document.getElementById("conta-senha").value;
+            const perfil = document.getElementById("conta-perfil").value;
+            const usuarios = lerUsuarios();
+            //erro caso cadastrem usuário já existente
+            if (usuarios.some(item => item.usuario === usuario))
+                return mensagem("mensagem-conta", "Este usuário já existe.\nCadastre outro.", "erro");
+            usuarios.push({ nome, usuario, senha, perfil });
+            salvarUsuarios(usuarios);
+            evento.target.reset();
+            mensagem("mensagem-conta", "Conta criada. Agora faça login para entrar.", "sucesso");
+            //esconde o formulário e volta para a tela de login
+            document.getElementById("tela-criar-conta").classList.add("oculto");
+            document.getElementById("formulario-login").classList.remove("oculto");
+        });
+        //Realização de Login
+        document.getElementById("form-login").addEventListener("submit", evento => {
+            evento.preventDefault();
+            const usuario = document.getElementById("login-usuario").value.trim().toLowerCase();
+            const senha = document.getElementById("login-senha").value;
+            //procura na lista apenas um usuário E senha exatos.Se achar, libera acesso. Se não achar, retorna erro.
+            const conta = lerUsuarios().find(item => item.usuario === usuario && item.senha === senha);
+            if (!conta)
+                return mensagem("mensagem-login", "Usuário ou senha inválidos.\nTente novamente.", "erro");
+            evento.target.reset();
+            entrarSistema(conta);
+        });
+
+        //Mostra o cadastro quando clica em "Criar conta"
+        document.getElementById("mostrar-cadastro-login").addEventListener("click", () => {
+            document.getElementById("formulario-login").classList.add("oculto");
+            document.getElementById("tela-criar-conta").classList.remove("oculto");
+        });
+        //Volta pro login quando clica em "Voltar para login"
+        document.getElementById("mostrar-login").addEventListener("click", () => {
+            document.getElementById("tela-criar-conta").classList.add("oculto");
+            document.getElementById("formulario-login").classList.remove("oculto");
+            //Volta pro login quando clica em "Sair"
+        });
+        document.getElementById("sair").addEventListener("click", () => {
+            console.log("cliquei no botão sair");
+            sairSistema();
+        });
+
+    </script>
+</body>
+
+</html>
