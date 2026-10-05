@@ -14,6 +14,24 @@
             display: none !important;
         }
 
+        .painel {
+            display: none;
+            margin-top: 28px;
+            border: 1px solid var(--borda);
+            border-radius: 14px;
+            background: var(--branco);
+            box-shadow: var(--sombra);
+            padding: clamp(20px, 4vw, 32px);
+        }
+
+        .painel {
+            display: none;
+        }
+
+        .painel.ativo {
+            display: block;
+        }
+
         .autenticacao {
             width: min(510px, 90vw);
             margin: 52px auto;
@@ -139,6 +157,8 @@
             width: min(1120px, 90vw);
             margin: 44px auto;
         }
+
+        /*CSS das opções principais*/
     </style>
 </head>
 <!--HTML que cria os elementos das páginas-->
@@ -198,17 +218,79 @@
                     login</button></p>
         </div>
     </section>
+    <!--TELA PRINCIPAL-->
     <main id="main" class="oculto">
         <section class="intro">
             <h1>Painel Principal</h1>
             <p>Realização de triagem, consulta de dados, cadastro de pacientes e atendimento médico</p>
         </section>
+        <section class="cards">
+            <!--FUNÇÃO DA TRIAGEM E DO MÉDICO-->
+            <article class="card" data-perfis="triagem medico">
+                <div>
+                    <div class="card-icon">⌕</div>
+                    <h2>Buscar paciente</h2>
+                    <p>Acessar o registro do paciente, seus dados e histórico</p>
+                </div>
+                <button type="button" data-abrir="busca">Buscar paciente</button>
+            </article>
+            <!--FUNÇÕES DA TRIAGEM-->
+            <article class="card" data-perfis="triagem">
+                <div>
+                    <div class="card-icon">+</div>
+                    <h2>Cadastrar paciente</h2>
+                    <p>Adicionar novo paciente ao sistema</p>
+                </div>
+                <button type="button" data-abrir="cadastro">Novo Cadastro</button>
+            </article>
+            <article class="card" data-perfis="triagem">
+                <div>
+                    <div class="card-icon">▣</div>
+                    <h2>Atendimento</h2>
+                    <p>Realização de triagem e registro de sintomas</p>
+                </div>
+                <button type="button" data-abrir="atendimento">Triagem</button>
+            </article>
+            <!--FUNÇÃO DO MÉDICO-->
+            <article class="card" data-perfis="medico">
+                <div>
+                    <div class="card-icon">☷</div>
+                    <h2>Fila médica</h2>
+                    <p>Atender pacientes por ordem de chegada</p>
+                </div>
+                <button type="button" data-abrir="fila">Acessar fila</button>
+            </article>
+        </section>
+        <!--TELA DE BUSCA DE PACIENTES-->
+        <section id="tela-busca" class="painel" data-perfis="triagem medico">
+            <div class="painel-topo">
+                <div>
+                    <h2>Buscar paciente</h2>
+                    <p>Informe o CPF para encontrar o cadastro do paciente</p>
+                </div>
+                <button class="fechar" data-fechar="busca" aria-label="Fechar">x</button>
+            </div>
+            <form id="form-busca">
+                <label>CPF
+                    <input id="cpf-busca" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required>
+                </label>
+                <div class="acoes">
+                    <button>Consultar</button>
+                </div>
+            </form>
+            <div id="resultado-busca"></div>
+        </section>
     </main>
 
-    <!--Conexão com SUPABASE-->
+    <!--Biblioteca do SUPABASE-->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!--JavaScript que define a parte funcional de cada elemento-->
     <script>
+        const dataBR = data => new Date(`${data}T12:00:00`).toLocaleDateString("pt-BR");
+        //Conexão com SUPABASE
+        const SUPABASE_URL = "https://tjbxeiruvbsilkehteox.supabase.co";
+        const SUPABASE_CHAVE_PUBLICA = "sb_publishable_Jx4TsKDfo7hD8QCrAAbumg_5d1cAkLX";
+        const clienteSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_CHAVE_PUBLICA);
         //As contas não são armazenadas em um banco de dados, mas sim no LocalStorage do navegador
         const CHAVE_USUARIOS = "clinica-usuarios";
         const CHAVE_SESSAO = "clinica-sessao";
@@ -218,7 +300,20 @@
             elemento.textContent = texto;
             elemento.className = `mensagem visivel ${tipo}`;
         };
-        const aplicarPermissoes = () => { };
+        //por padrão, todo .painel fica escondido; mas se também tiver a classe .ativo, mostre ele
+        document.querySelectorAll(".painel").forEach(painel => painel.classList.remove("ativo"));
+        //verifica se o perfil de quem está logado está na lista; se não, esconde o elemento
+        const aplicarPermissoes = () => {
+            //busca todos os elementos com o atributo [data-perfis]
+            document.querySelectorAll("[data-perfis]").forEach(elemento => {
+                //transforma o string em um array para torná-lo legível
+                const perfisPermitidos = elemento.dataset.perfis.split(" ");
+                //lê qual usuário está logado (médico ou triagem)
+                const podeVer = perfisPermitidos.includes(usuarioAtual.perfil);
+                //lê a permissão de cada usuário e exibe os elementos permitidos
+                elemento.classList.toggle("oculto", !podeVer);
+            });
+        };
         //Abre a lista no LocalStorage (se estiver vazia, retorna "[]")
         const lerUsuarios = () => JSON.parse(localStorage.getItem(CHAVE_USUARIOS) || "[]");
         //Fecha o LocalStorage com uma lista nova e o "JSON.parse" faz o caminho inverso ("JSON.stringify" para transformar uma lista de objetos em texto)
@@ -302,6 +397,96 @@
         document.getElementById("sair").addEventListener("click", () => {
             console.log("cliquei no botão sair");
             sairSistema();
+        });
+        //FUNÇÃO DE BUSCA DE CPF
+        // Esconde todas as telas internas e mostra só uma
+        const abrir = nome => {
+            document.querySelectorAll(".painel").forEach(painel => painel.classList.remove("ativo"));
+            //Template de string que permite abrir qualquer tela sem precisar de um IF pra cada tela
+            document.getElementById(`tela-${nome}`).classList.add("ativo");
+        };
+        // Liga cada botão com "data-abrir" a essa função
+        document.querySelectorAll("[data-abrir]").forEach(botao => {
+            botao.addEventListener("click", () => abrir(botao.dataset.abrir));
+        });
+        // Liga cada botão com "data-fechar" a esconder a tela correspondente
+        document.querySelectorAll("[data-fechar]").forEach(botao => {
+            botao.addEventListener("click", () => {
+                document.getElementById(`tela-${botao.dataset.fechar}`).classList.remove("ativo");
+            });
+        });
+        //Pega qualquer texto e remove tudo que não for número
+        const somenteNumeros = valor => valor.replace(/\D/g, "");
+        //formatação automática conforme a digitação do CPF
+        const formatarCPF = valor => {
+            const n = somenteNumeros(valor).slice(0, 11);
+            return n.replace(/(\d{3})(\d)/, "$1.$2")
+                .replace(/(\d{3})(\d)/, "$1.$2")
+                .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+        };
+        document.getElementById("cpf-busca").addEventListener("input", evento => {
+            evento.target.value = formatarCPF(evento.target.value);
+        });
+        //ao digitar algo em qualquer campo de CPF da lista, o valor é reescrito já formatado
+        const cpfInputs = document.querySelectorAll("#cpf-busca, #cpf-cadastro, #cpf-atendimento");
+        cpfInputs.forEach(input => input.addEventListener("input", () => input.value = formatarCPF(input.value)));
+        //validação de CPF
+        const cpfValido = cpf => {
+            const n = somenteNumeros(cpf);
+            if (n.length !== 11 || /^([0-9])\1+$/.test(n)) return false;
+            let soma = 0;
+            for (let i = 0; i < 9; i++) soma += Number(n[i]) * (10 - i);
+            let digito = (soma * 10) % 11;
+            if (digito === 10) digito = 0;
+            if (digito !== Number(n[9])) return false;
+            soma = 0;
+            for (let i = 0; i < 10; i++) soma += Number(n[i]) * (11 - i);
+            digito = (soma * 10) % 11;
+            if (digito === 10) digito = 0;
+            return digito === Number(n[10]);
+        };
+        //BUSCA O PACIENTE: Pega colunas específicas da tabela pacientes, onde o cpf seja igual ao CPF que o usuário digitou
+        const buscar = async cpf => {
+            const { data, error } = await clienteSupabase
+                .from("pacientes")
+                .select("cpf, nome, data_nascimento, alergias")
+                .eq("cpf", somenteNumeros(cpf))
+                .maybeSingle();
+            if (error) throw error;
+            return pacienteSupabase(data);
+        };
+        //Traduz os nomes de campo do banco de dados para nomes compatíveis com JS e troca "alergia" vazia por um texto padrão
+        const pacienteSupabase = registro => registro
+            ? { cpf: registro.cpf, nome: registro.nome, nascimento: registro.data_nascimento, alergias: registro.alergias || "Nenhuma informada" }
+            : null;
+        //Molde reaproveitado para exibir os dados do paciente
+        const perfilHTML = paciente => `
+            <div class="perfil">
+            <div><strong>Nome</strong><span>${paciente.nome}</span></div>
+            <div><strong>Nascimento</strong><span>${dataBR(paciente.nascimento)}</span></div>
+            <div><strong>CPF</strong><span>${formatarCPF(paciente.cpf)}</span></div>
+            <div><strong>Alergias</strong><span>${paciente.alergias}</span></div>
+            </div>`;
+        //Recebe CPF, valida o formato antes de buscar; se achar o paciente mostra os dados, se não mostra "não encontrado". 
+        document.getElementById("form-busca").addEventListener("submit", async evento => {
+            evento.preventDefault();
+            const cpf = document.getElementById("cpf-busca").value;
+            const resultado = document.getElementById("resultado-busca");
+            if (!cpfValido(cpf)) {
+                resultado.innerHTML = `<div class="mensagem visivel erro">CPF inválido.</div>`;
+                return;
+            }
+            //prevenção: caso haja uma falha (sem internet, erro no Supabase, etc.) mostra uma mensagem, ao invés de travar o script
+            try {
+                const paciente = await buscar(cpf);
+                if (!paciente) {
+                    resultado.innerHTML = `<div class="mensagem visivel alerta">Paciente não encontrado.</div>`;
+                    return;
+                }
+                resultado.innerHTML = perfilHTML(paciente);
+            } catch (erro) {
+                resultado.innerHTML = `<div class="mensagem visivel erro">Não foi possível buscar: ${erro.message}</div>`;
+            }
         });
 
     </script>
