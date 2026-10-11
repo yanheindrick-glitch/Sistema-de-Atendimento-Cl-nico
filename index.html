@@ -280,6 +280,52 @@
             </form>
             <div id="resultado-busca"></div>
         </section>
+        <!--TELA DE ATENDIMENTO DA TRIAGEM-->
+        <section id="tela-atendimento" class="painel" data-perfis="triagem">
+            <div class="painel-topo">
+                <div>
+                    <h2>Registrar atendimento</h2>
+                    <p>Selecione o paciente e descreva a queixa principal</p>
+                </div>
+                <button class="fechar" data-fechar="atendimento" aria-label="Fechar">x</button>
+            </div>
+            <form id="form-atendimento">
+                <label>CPF do paciente
+                    <input id="cpf-atendimento" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"
+                        required>
+                </label>
+                <!--Duas divs vazias de propósito, que o JavaScript preenche após o CPF ser digitado-->
+                <div id="perfil-atendimento"></div>
+                <div id="alerta-alergia"></div>
+                <label>Sintomas
+                    <textarea id="sintomas" placeholder="Descreva os sintomas apresentados..." required></textarea>
+                </label>
+                <label>Classificação de risco</label>
+                <!--Botões de risco-->
+                <div class="risco-opcoes">
+                    <!--Todos os botões têm o nome "risco", dessa maneira apenas um deles pode ser selecionado por vez-->
+                    <label class="emergencia">Emergência
+                        <input type="radio" name="risco" value="Emergência">
+                    </label>
+                    <label class="muito-urgente">Muito Urgente
+                        <input type="radio" name="risco" value="Muito Urgente">
+                    </label>
+                    <label class="urgente">Urgente
+                        <input type="radio" name="risco" value="Urgente">
+                    </label>
+                    <label class="pouco-urgente">Pouco Urgente
+                        <input type="radio" name="risco" value="Pouco Urgente">
+                    </label>
+                    <label class="nao-urgente">Não Urgente
+                        <input type="radio" name="risco" value="Não Urgente">
+                    </label>
+                </div>
+                <div class="acoes">
+                    <button>Salvar atendimento</button>
+                </div>
+            </form>
+            <div id="mensagem-atendimento" class="mensagem"></div>
+        </section>
     </main>
 
     <!--Biblioteca do SUPABASE-->
@@ -489,6 +535,65 @@
             }
         });
 
+        //FUNÇÃO DE ATENDIMENTO DA TRIAGEM
+        const carregarPacienteAtendimento = async () => {
+            const campoCPF = document.getElementById("cpf-atendimento");
+            const perfil = document.getElementById("perfil-atendimento");
+            const alerta = document.getElementById("alerta-alergia");
+            //só vai consultar se o CPF tem 11 números
+            if (somenteNumeros(campoCPF.value).length !== 11) {
+                perfil.innerHTML = "";
+                alerta.innerHTML = "";
+                return;
+            }
+            try {
+                const paciente = await buscar(campCPF.value);
+                perfil.innerHTML = paciente
+                    ? perfilHTML(paciente)
+                    : `<div class="mensagem visível alerta">Paciente não encontrado.</div>`;
+                alerta.innerHTML = paciente && paciente.alergias !== "Nenhuma informada"
+                    ? `<div class="mensagem visivel alerta">Atenção: este paciente possui alergias cadastradas: <strong${paciente.alergias}</strong>.</div>`
+                    : "";
+            } catch (erro) {
+                mensagem("mensagem-atendimento", "Não foi possível consultar o paciente. Verifique a conexão.", "erro");
+            }
+        };
+        document.getElementById("cpf-atendimento").addEventListener("input", carregarPacienteAtendimento);
+        //salvar o atendimento
+        document.getElementById("form-atendimento").addEventListener("submit", async evento => {
+            evento.preventDefault();
+            const cpf = somenteNumeros(document.getElementById("cpf-atendimento").value);
+            const sintomas = document.getElementById("sintomas").value.trim();
+            const riscoMarcado = document.querySelector("input[name=risco]:checked");
+            //Validação e mensagens de erro
+            if (!cpfValido(cpf)) return mensagem("mensagem-atendimento", "CPF inválido.", "erro");
+            if (!sintomas) return mensagem("mensagem-atendimento", "Descreva os sintomas.", "erro");
+            if (!riscoMarcado) return mensagem("mensagem-atendimento", "Selecione a classificação de risco.", "erro");
+            //Buscar o paciente antes de salvar, para garantir
+            try {
+                const paciente = await buscar(cpf);
+                if (!paciente) return mensagem("mensagem-atendimento", "Paciente não encontrado. Cadastre-o antes de registrar o atendimento.", "erro");
+                //Registrar atendimento no banco de dados
+                const { error } = await clienteSupabase.from("atendimentos").insert({
+                    cpf: cpf,
+                    //Ordenação por ordem de chegada
+                    data: new Date().toISOString(),
+                    sintomas: sintomas,
+                    urgencia: riscoMarcado.value,
+                    prescricao: "",
+                    //Registrando status do atendimento
+                    status: "Aguardando"
+                });
+                if (error) throw error;
+
+                evento.target.reset();
+                document.getElementById("perfil-atendimento").innerHTML = "";
+                document.getElementById("alerta-alergia").innerHTML = "";
+                mensagem("mensagem-atendimento", "Atendimento enviado para a fila médica.", "sucesso");
+            } catch (erro) {
+                mensagem("mensagem-atendimento", `Não foi possível salvar o atendimento: ${erro.message}`, "erro");
+            }
+        });
     </script>
 </body>
 
