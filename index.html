@@ -9,7 +9,6 @@
     <title>Clínica | Atendimento inteligente</title>
     <!--CSS que define o visual de todos os elementos das páginas-->
     <style>
-        /*CSS genérico básico*/
         .oculto {
             display: none !important;
         }
@@ -80,7 +79,7 @@
             font-size: .88rem;
         }
 
-        /*CSS dos campos de preenchimento de formulário*/
+
         input,
         textarea,
         select {
@@ -95,7 +94,7 @@
             font: inherit;
         }
 
-        /*CSS da mensagem de erro*/
+
         .mensagem {
             margin: 16px 0 0;
             padding: 12px 14px;
@@ -117,7 +116,7 @@
             background: #eaf8f1;
         }
 
-        /*CSS do cabeçalho*/
+
         header {
             background: var(--branco);
             border-bottom: 1px solid var(--borda);
@@ -152,13 +151,23 @@
             color: var(--muted);
         }
 
-        /*CSS da tela principal*/
+
         main {
             width: min(1120px, 90vw);
             margin: 44px auto;
         }
 
-        /*CSS das opções principais*/
+
+        .campo-largo {
+            grid-column: 1 / -1;
+        }
+
+        .acoes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <!--HTML que cria os elementos das páginas-->
@@ -325,6 +334,34 @@
                 </div>
             </form>
             <div id="mensagem-atendimento" class="mensagem"></div>
+        </section>
+        <!--TELA DE CADASTRO DE PACIENTE-->
+        <section id="tela-cadastro" class="painel" data-perfis="triagem">
+            <div class="painel-topo">
+                <div>
+                    <h2>Novo Cadastro</h2>
+                    <p>Preencha os dados básicos do paciente</p>
+                </div>
+                <button class="fechar" data-fechar="cadastro" aria-label="Fechar">x</button>
+            </div>
+            <form id="form-cadastro" class="grid-form">
+                <label>CPF
+                    <input id="cpf-cadastro" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required>
+                </label>
+                <label>Nome completo
+                    <input id="nome-cadastro" required>
+                </label>
+                <label>Data de nascimento
+                    <input id="nascimento-cadastro" type="date" required>
+                </label>
+                <label>Alergias
+                    <input id="alergias-cadastro" placeholder="Deixe em branco se não houver">
+                </label>
+                <div class="acoes campo-largo">
+                    <button>Cadastrar paciente</button>
+                </div>
+            </form>
+            <div id="mensagem-cadastro" class="mensagem"></div>
         </section>
     </main>
 
@@ -593,6 +630,32 @@
             } catch (erro) {
                 mensagem("mensagem-atendimento", `Não foi possível salvar o atendimento: ${erro.message}`, "erro");
             }
+        });
+        //FUNÇÃO DE CADASTRO DE PACIENTE
+        document.getElementById("form-cadastro").addEventListener("submit", async evento =>{
+            evento.preventDefault();
+            //Lê os campos (CPF guardado só em números, do jeito que a busca espera)
+            const cpf = somenteNumeros(document.getElementById("cpf-cadastro").value);
+            const nome = document.getElementById("nome-cadastro").value.trim();
+            const nascimento = document.getElementById("nascimento-cadastro").value;
+            const alergias = document.getElementById("alergias-cadastro").value.trim();
+            //Valida o CPF
+            if (!cpfValido(cpf)) return mensagem("mensagem-cadastro","CPF inválido. Confira os digitos inseridos.","erro");
+            //Valida se o nome foi inserido no campo corretamente
+            if (!nome) return mensagem("mensagem-cadastro","Informe o nome completo.","erro");
+            //Prepara o cadastro do paciente para enviar para o banco de dados
+            const paciente = {
+                cpf: cpf,
+                nome: nome,
+                data_nascimento: nascimento,
+                alergias: alergias || "Nenhuma informada"
+            };
+            //Envia o cadastro do paciente para o banco de dados na tabela "pacientes"
+            const { error } = await clienteSupabase.from("pacientes").insert(paciente);
+            //(erro 23505 é o erro que o banco de dados devolve quando o usuário tenta gravar algo que já existe numa coluna que não aceita repetição.)
+            if (error) return mensagem("mensagem-cadastro", error.code === "23505" ? "Este CPF já está cadastrado." : `Não foi possível cadastrar: ${error.message}`, "erro");
+            evento.targert.reset();
+            mensagem("mensagem-cadastro", "Paciente cadastrado com sucesso.", "sucesso");
         });
     </script>
 </body>
