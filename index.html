@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <!--Controla o layout em dispositivos móveis-->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clínica | Atendimento inteligente</title>
+    <title>Sistema de Atendimento Clínico</title>
     <!--CSS que define o visual de todos os elementos das páginas-->
     <style>
         .oculto {
@@ -168,6 +168,97 @@
             gap: 10px;
             margin-top: 20px;
         }
+
+        .contador-fila,
+        .fila-controles {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin: 14px 0;
+        }
+
+        .contador {
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: var(--azul-claro);
+            font-size: .88rem;
+        }
+
+        .fila-item {
+            border: 1px solid var(--borda);
+            border-left: 5px solid var(--ciano);
+            border-radius: 10px;
+            padding: 16px;
+            margin: 12px 0;
+        }
+
+        .fila-item.critico {
+            border-left-color: #c62828;
+            background: #fff5f5;
+        }
+
+        .fila-topo {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .fila-meta {
+            color: var(--muted);
+            font-size: .86rem;
+            margin: 8px 0;
+        }
+
+        .tempo-espera {
+            color: #8d2020;
+            font-weight: 700;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 9px;
+            border-radius: 99px;
+            color: white;
+            font-size: .76rem;
+        }
+
+        .vazio {
+            color: var(--muted);
+            padding: 15px 0;
+        }
+
+        button.secundario {
+            color: var(--azul);
+            background: var(--azul-claro);
+        }
+
+        .alerta {
+            color: #754e05;
+            background: #fff5d9;
+            border-left: 4px solid #e7aa20;
+        }
+
+        .emergencia {
+            background: #c62828;
+        }
+
+        .muito-urgente {
+            background: #ef6c00;
+        }
+
+        .urgente {
+            background: #f6b400;
+        }
+
+        .pouco-urgente {
+            background: #4b9e55;
+        }
+
+        .nao-urgente {
+            background: #2095b0;
+        }
     </style>
 </head>
 <!--HTML que cria os elementos das páginas-->
@@ -256,7 +347,7 @@
                 <div>
                     <div class="card-icon">▣</div>
                     <h2>Atendimento</h2>
-                    <p>Realização de triagem e registro de sintomas</p>
+                    <p>Realizar triagem e registro de sintomas</p>
                 </div>
                 <button type="button" data-abrir="atendimento">Triagem</button>
             </article>
@@ -363,12 +454,38 @@
             </form>
             <div id="mensagem-cadastro" class="mensagem"></div>
         </section>
+        <!--TELA DA FILA MÉDICA-->
+        <section id="tela-fila" class="painel" data-perfis="medico">
+            <div class="painel-topo">
+                <div>
+                    <h2>Fila de Atendimento Médico</h2>
+                    <p>Os pacientes entram automaticamente após a triagem</p>
+                </div>
+                <button class="fechar" data-fechar="fila" aria-label="Fechar">x</button>
+            </div>
+            <!--Contadores-->
+            <div class="contador-fila">
+                <span class="contador">Aguardando: <strong id="contador-aguardando">0</strong></span>
+                <span class="contador">Em atendimento: <strong id="contador-atendimento">0</strong></span>
+                <span class="contador">Finalizado: <strong id="contador-finalizados">0</strong></span>
+            </div>
+            <!--Controles-->
+            <div class="fila-controles">
+                <button type="button" id="ordenar-chegada">Ordem de chegada</button>
+                <button type="button" class="secundario" id="ordenar-prioridade">Por prioridade</button>
+                <button tupe="button" id="chamar-proximo">Chamar próximo</button>
+            </div>
+            <div id="mensagem-fila" class="mensagem"></div>
+            <!--div para o JS desenhar os cards-->
+            <div id="lista-fila"></div>
+        </section>
     </main>
 
     <!--Biblioteca do SUPABASE-->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!--JavaScript que define a parte funcional de cada elemento-->
     <script>
+        let usuarioAtual = null;
         const dataBR = data => new Date(`${data}T12:00:00`).toLocaleDateString("pt-BR");
         //Conexão com SUPABASE
         const SUPABASE_URL = "https://tjbxeiruvbsilkehteox.supabase.co";
@@ -416,6 +533,8 @@
          <span class="perfil-usuario">(${usuario.perfil === "medico" ? "Médico" : "Triagem"})</span>`;
             document.getElementById("subtitulo-cabecalho").textContent = usuario.perfil === "medico" ? "Área médica" : "Área de triagem";
             aplicarPermissoes();
+            //se for médico, começa a atualizar a fila
+            if (usuario.perfil === "medico") iniciarAtualizacaoFila();
         }
         //função que sai do sistema
         const sairSistema = () => {
@@ -429,10 +548,8 @@
             document.getElementById("tela-login").classList.remove("oculto");
             document.querySelectorAll(".painel").forEach(painel => painel.classList.remove("ativo"));
             document.getElementById("form-login").reset();
+            pararAtualizacaoFila();
         }
-        //função que verifica o LocalStorage e chama a função entrarSistema automaticamente para manter o login
-        const sessao = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
-        if (sessao) entrarSistema(sessao);
         //Realização de Cadastro de usuário
         document.getElementById("formulario-conta").addEventListener("submit", evento => {
             evento.preventDefault(); //impede que o site recarregue
@@ -584,12 +701,12 @@
                 return;
             }
             try {
-                const paciente = await buscar(campCPF.value);
+                const paciente = await buscar(campoCPF.value);
                 perfil.innerHTML = paciente
                     ? perfilHTML(paciente)
-                    : `<div class="mensagem visível alerta">Paciente não encontrado.</div>`;
+                    : `<div class="mensagem visivel alerta">Paciente não encontrado.</div>`;
                 alerta.innerHTML = paciente && paciente.alergias !== "Nenhuma informada"
-                    ? `<div class="mensagem visivel alerta">Atenção: este paciente possui alergias cadastradas: <strong${paciente.alergias}</strong>.</div>`
+                    ? `<div class="mensagem visivel alerta">Atenção: este paciente possui alergias cadastradas: <strong>${paciente.alergias}</strong>.</div>`
                     : "";
             } catch (erro) {
                 mensagem("mensagem-atendimento", "Não foi possível consultar o paciente. Verifique a conexão.", "erro");
@@ -632,7 +749,7 @@
             }
         });
         //FUNÇÃO DE CADASTRO DE PACIENTE
-        document.getElementById("form-cadastro").addEventListener("submit", async evento =>{
+        document.getElementById("form-cadastro").addEventListener("submit", async evento => {
             evento.preventDefault();
             //Lê os campos (CPF guardado só em números, do jeito que a busca espera)
             const cpf = somenteNumeros(document.getElementById("cpf-cadastro").value);
@@ -640,9 +757,9 @@
             const nascimento = document.getElementById("nascimento-cadastro").value;
             const alergias = document.getElementById("alergias-cadastro").value.trim();
             //Valida o CPF
-            if (!cpfValido(cpf)) return mensagem("mensagem-cadastro","CPF inválido. Confira os digitos inseridos.","erro");
+            if (!cpfValido(cpf)) return mensagem("mensagem-cadastro", "CPF inválido. Confira os digitos inseridos.", "erro");
             //Valida se o nome foi inserido no campo corretamente
-            if (!nome) return mensagem("mensagem-cadastro","Informe o nome completo.","erro");
+            if (!nome) return mensagem("mensagem-cadastro", "Informe o nome completo.", "erro");
             //Prepara o cadastro do paciente para enviar para o banco de dados
             const paciente = {
                 cpf: cpf,
@@ -654,9 +771,163 @@
             const { error } = await clienteSupabase.from("pacientes").insert(paciente);
             //(erro 23505 é o erro que o banco de dados devolve quando o usuário tenta gravar algo que já existe numa coluna que não aceita repetição.)
             if (error) return mensagem("mensagem-cadastro", error.code === "23505" ? "Este CPF já está cadastrado." : `Não foi possível cadastrar: ${error.message}`, "erro");
-            evento.targert.reset();
+            evento.target.reset();
             mensagem("mensagem-cadastro", "Paciente cadastrado com sucesso.", "sucesso");
         });
+        //FUNÇÃO DA FILA MÉDICA
+        let filaModo = "chegada";      //"chegada" ou "prioridade"
+        let filaDados = [];            //atendimentos já carregados do banco
+        let temporizadorFila = null;   //guarda o "relógio" que atualiza a fila
+
+        //Classe CSS de cada risco (usada na etiqueta colorida)
+        const riscos = { "Emergência": "emergencia", "Muito Urgente": "muito-urgente", "Urgente": "urgente", "Pouco Urgente": "pouco-urgente", "Não Urgente": "nao-urgente" };
+        //Quanto menor o número, mais urgente
+        const ordemRisco = { "Emergência": 1, "Muito Urgente": 2, "Urgente": 3, "Pouco Urgente": 4, "Não Urgente": 5 };
+
+        //Idade: diminui os anos e tira 1 se o aniversário ainda não chegou este ano
+        const idadePaciente = nascimento => {
+            const hoje = new Date();
+            const data = new Date(`${nascimento}T12:00:00`);
+            let idade = hoje.getFullYear() - data.getFullYear();
+            if (hoje < new Date(hoje.getFullYear(), data.getMonth(), data.getDate())) idade--;
+            return idade;
+        };
+        //Minutos desde a chegada (nunca negativo)
+        const minutosEspera = data => Math.max(0, Math.floor((Date.now() - new Date(data).getTime()) / 60000));
+        const carregarFila = async () => {
+            if (!usuarioAtual || usuarioAtual.perfil !== "medico") return;
+            try {
+                //todos os atendimentos, do mais antigo para o mais novo
+                const resposta = await clienteSupabase
+                    .from("atendimentos")
+                    .select("id, cpf, data, sintomas, urgencia, status")
+                    .order("data", { ascending: true });
+                if (resposta.error) throw resposta.error;
+                const atendimentos = resposta.data || [];
+
+                //os dados dos pacientes desses atendimentos
+                const cpfs = [...new Set(atendimentos.map(item => item.cpf))]; //tira CPFs repetidos, porque o mesmo paciente pode ter vários atendimentos
+                let pacientes = [];
+                if (cpfs.length) {
+                    const respostaPacientes = await clienteSupabase
+                        .from("pacientes")
+                        .select("cpf, nome, data_nascimento, alergias")
+                        .in("cpf", cpfs); //só exibe os pacientes dos quais o CPF esteja na lista
+                    if (respostaPacientes.error) throw respostaPacientes.error;
+                    pacientes = respostaPacientes.data || [];
+                }
+
+                // junta as duas listas pelo CPF
+                const mapa = Object.fromEntries(pacientes.map(item => [item.cpf, pacienteSupabase(item)])); //cria uma agenda para achar o paciente pelo CPF rapidamente
+                filaDados = atendimentos
+                    .map(item => ({ ...item, status: item.status || "Aguardando", paciente: mapa[item.cpf] }))
+                    .filter(item => item.paciente); //descarta atendimento cujo paciente não foi encontrado
+
+                document.getElementById("mensagem-fila").className = "mensagem"; //some qualquer aviso antigo
+                renderizarFila();
+            } catch (erro) {
+                mensagem("mensagem-fila", `Não foi possível carregar a fila: ${erro.message}`, "erro");
+            }
+        };
+        //Ordena: por chegada, ou por risco (e, em empate de risco, por chegada)
+        const ordenarFila = lista => [...lista].sort((a, b) => {
+            const diferencaChegada = new Date(a.data) - new Date(b.data);
+            if (filaModo === "prioridade") return (ordemRisco[a.urgencia] - ordemRisco[b.urgencia]) || diferencaChegada;
+            return diferencaChegada;
+        });
+
+        const renderizarFila = () => {
+            //Contadores
+            const contar = status => filaDados.filter(item => item.status === status).length;
+            document.getElementById("contador-aguardando").textContent = contar("Aguardando");
+            document.getElementById("contador-atendimento").textContent = contar("Em atendimento");
+            document.getElementById("contador-finalizados").textContent = contar("Finalizado");
+
+            //Lista: só quem ainda não terminou
+            const ativos = ordenarFila(filaDados.filter(item => item.status === "Aguardando" || item.status === "Em atendimento"));
+            const lista = document.getElementById("lista-fila");
+            if (!ativos.length) {
+                lista.innerHTML = `<p class="vazio">Nenhum paciente aguardando ou em atendimento.</p>`;
+                return;
+            }
+            //transforma cada atendimento em um pedaço de HTML
+            lista.innerHTML = ativos.map((item, posicao) => `
+        <article class="fila-item ${item.urgencia === "Emergência" || item.urgencia === "Muito Urgente" ? "critico" : ""}">
+            <div class="fila-topo">
+                <strong>#${posicao + 1} ${item.paciente.nome}</strong>
+                <span class="badge ${riscos[item.urgencia]}">${item.urgencia}</span>
+            </div>
+            <div class="fila-meta">
+                ${idadePaciente(item.paciente.nascimento)} anos •
+                Chegada: ${new Date(item.data).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} •
+                <span class="tempo-espera">Espera: ${minutosEspera(item.data)} min</span>
+            </div>
+            <p>${item.sintomas}</p>
+            <button type="button" data-id="${item.id}">
+                ${item.status === "Em atendimento" ? "Abrir atendimento" : "Atender paciente"}
+            </button>
+        </article>`).join(""); //junta tudo em uma string, que vai para "lista-fila"
+        };
+
+        const definirModoFila = modo => {
+            filaModo = modo;
+            document.getElementById("ordenar-chegada").classList.toggle("secundario", modo !== "chegada");
+            document.getElementById("ordenar-prioridade").classList.toggle("secundario", modo !== "prioridade");
+            renderizarFila();
+        };
+        //Marca o atendimento como "Em atendimento" (se ainda estiver aguardando) e abre a tela do médico
+        const atenderPaciente = async id => {
+            const atendimento = filaDados.find(item => item.id === id);
+            if (!atendimento) return;
+            if (atendimento.status === "Aguardando") {
+                const { data, error } = await clienteSupabase
+                    .from("atendimentos")
+                    //recebe o novo status, a hora de início e o nome do médico
+                    .update({ status: "Em atendimento", data_inicio: new Date().toISOString(), medico: usuarioAtual.nome })
+                    .eq("id", id)
+                    .eq("status", "Aguardando")  //se dois médicos clicarem no mesmo paciente ao mesmo tempo, só o primeiro consegue
+                    .select();
+                if (error) return mensagem("mensagem-fila", `Não foi possível chamar o paciente: ${error.message}`, "erro");
+                await carregarFila();
+                if (!data.length) return mensagem("mensagem-fila", "Este paciente já foi chamado por outro médico.", "alerta");
+            }
+            abrirAtendimentoMedico(id);
+        };
+
+        const chamarProximo = () => {
+            const proximo = ordenarFila(filaDados.filter(item => item.status === "Aguardando"))[0];
+            if (!proximo) return mensagem("mensagem-fila", "Não há pacientes aguardando.", "alerta");
+            atenderPaciente(proximo.id);
+        };
+
+        //PRÓXIMO PASSO: a tela de atendimento médico ainda não existe, então por enquanto só avisa
+        const abrirAtendimentoMedico = id => {
+            mensagem("mensagem-fila", `Atendimento #${id} iniciado. A tela do médico será o próximo passo.`, "sucesso");
+        };
+
+        document.getElementById("ordenar-chegada").addEventListener("click", () => definirModoFila("chegada"));
+        document.getElementById("ordenar-prioridade").addEventListener("click", () => definirModoFila("prioridade"));
+        document.getElementById("chamar-proximo").addEventListener("click", chamarProximo);
+
+        //Um único "ouvido" na caixa da lista, que não é recriada, vale para todos os botões novos
+        document.getElementById("lista-fila").addEventListener("click", evento => {
+            const botao = evento.target.closest("[data-id]");
+            if (botao) atenderPaciente(Number(botao.dataset.id));
+        });
+        //atualização automática
+        const iniciarAtualizacaoFila = () => {
+            if (temporizadorFila) return;                      //já está rodando
+            carregarFila();                                    //carrega já na entrada
+            temporizadorFila = setInterval(carregarFila, 5000); //e de 5 em 5 segundos
+        };
+        const pararAtualizacaoFila = () => {
+            clearInterval(temporizadorFila);
+            temporizadorFila = null;
+            filaDados = [];
+        };
+        //função que verifica o LocalStorage e chama a função entrarSistema automaticamente para manter o login
+        const sessao = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
+        if (sessao) entrarSistema(sessao);
     </script>
 </body>
 
