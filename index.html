@@ -326,25 +326,6 @@
         .nao-urgente {
             background: #2095b0;
         }
-
-        /* ===== ADICIONADO: CSS que faltava (cores, botões e cards) ===== */
-        :root{--fundo:#f3f8fb;--texto:#17313f;--muted:#5f7684;--azul:#0c4a63;--azul-claro:#e2f1f6;--ciano:#1696b3;--borda:#d7e4ec;--branco:#fff;--sombra:0 6px 20px rgba(12,74,99,.08)}
-        button{padding:11px 18px;border:0;border-radius:8px;color:#fff;background:var(--ciano);font:inherit;font-weight:650;cursor:pointer}
-        input,textarea,select{box-sizing:border-box}
-        .usuario-logado{display:flex;align-items:center;gap:12px;font-weight:650}
-        .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-top:28px}
-        .card{display:flex;flex-direction:column;justify-content:space-between;gap:18px;padding:22px;background:#fff;border:1px solid var(--borda);border-radius:14px;box-shadow:var(--sombra)}
-        .card h2{margin:10px 0 6px;font-size:1.15rem}.card p{margin:0;color:var(--muted)}
-        .card-icon{display:grid;place-items:center;width:42px;height:42px;color:var(--ciano);background:var(--azul-claro);border-radius:10px;font-size:1.4rem}
-        .painel-topo{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px}
-        .painel-topo h2{margin:0 0 4px}.painel-topo p{margin:0;color:var(--muted)}
-        button.fechar{height:38px;color:var(--azul);background:var(--azul-claro)}
-        .risco-opcoes{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
-        .risco-opcoes label{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;color:#fff;cursor:pointer}
-        .risco-opcoes input{display:inline-block;width:auto;margin:0}
-        .risco-opcoes label:has(input:checked){outline:3px solid var(--texto);outline-offset:2px}
-        .alerta{padding:12px 14px;border-radius:8px;margin-bottom:14px}
-        .historico-item{padding:10px 0;border-bottom:1px solid var(--borda)}
     </style>
 </head>
 <!--HTML que cria os elementos das páginas-->
@@ -378,7 +359,7 @@
             <!--Mensagem de erro (JS)-->
             <div id="mensagem-login" class="mensagem"></div>
             <!--OPÇÃO DE CRIAR CONTA-->
-            <p class="troca-autenticacao">Ainda não possui acesso?
+            <p class="link cadastro">Ainda não possui acesso?
                 <button type="Button" id="mostrar-cadastro-login">Criar conta</button>
             </p>
         </div>
@@ -400,7 +381,7 @@
                 <div class="acoes"><button>Criar conta</button></div>
             </form>
             <div id="mensagem-conta" class="mensagem"></div>
-            <p class="troca-autenticacao">Já possui acesso? <button type="button" id="mostrar-login">Voltar para
+            <p class="troca autenticacao">Já possui acesso? <button type="button" id="mostrar-login">Voltar para
                     login</button></p>
         </div>
     </section>
@@ -581,7 +562,7 @@
                 <label>Diagnóstico
                     <input id="medico-diagnostico" required>
                 </label>
-                <!--O CRM não é guardado no banco. Ele só serve para sair na assinatura da receita-->
+                <!--O CRM não é guardado no banco. Ele só serve para sair na assinatura da receita-->>
                 <label>CRM do médico
                     <input id="medico-crm" placeholder="Usado na assinatura da receita">
                 </label>
@@ -620,219 +601,4 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!--JavaScript que define a parte funcional de cada elemento-->
     <script>
-        // ===== CONFIGURAÇÃO: endereço do backend Java =====
-        const API = "http://localhost:8080/api";
-        let sessao = JSON.parse(sessionStorage.getItem("sessao") || "null"); // Usuário logado
-        let fila = [], ordem = "chegada", atual = null;                      // Fila e atendimento aberto
-
-        // ===== AUXILIARES =====
-        const $ = (id) => document.getElementById(id);
-        const num = (v) => v.replace(/\D/g, "");                              // "123.456" -> "123456"
-        const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) =>
-            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-        function msg(id, texto, tipo = "erro") { const e = $(id); e.textContent = texto; e.className = "mensagem visivel " + tipo; }
-        function idade(n) { const d = new Date(n + "T00:00:00"), h = new Date(); let a = h.getFullYear() - d.getFullYear();
-            if (h < new Date(h.getFullYear(), d.getMonth(), d.getDate())) a--; return a; }
-        const classeUrg = (u) => u.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-");
-        function espera(d) { const m = Math.max(0, Math.floor((Date.now() - new Date(d)) / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + "h " + (m % 60) + "min"; }
-        function blocoPerfil(nome, cpf, nasc, alergias) {
-            return `<div class="perfil"><div><strong>Nome</strong><span>${esc(nome)}</span></div><div><strong>CPF</strong><span>${esc(cpf)}</span></div>
-            <div><strong>Idade</strong><span>${nasc ? idade(nasc) + " anos" : "-"}</span></div><div><strong>Alergias</strong><span>${esc(alergias)}</span></div></div>`;
-        }
-
-        // Máscara do CPF enquanto digita
-        ["cpf-busca", "cpf-atendimento", "cpf-cadastro"].forEach((id) => $(id).addEventListener("input", (e) => {
-            e.target.value = num(e.target.value).slice(0, 11).replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-        }));
-
-        // ===== COMUNICAÇÃO COM O JAVA (todas as telas usam esta função) =====
-        async function api(caminho, metodo = "GET", corpo = null) {
-            let r;
-            try {
-                r = await fetch(API + caminho, { method: metodo, headers: { "Content-Type": "application/json" },
-                    body: corpo ? JSON.stringify(corpo) : undefined });
-            } catch (e) { throw new Error("Não foi possível conectar ao servidor. O Java está rodando?"); }
-            let d = null; try { d = await r.json(); } catch (e) {}
-            if (!r.ok) throw new Error((d && d.message) || "Erro " + r.status);
-            return d;
-        }
-
-        // ===== LOGIN / CRIAR CONTA / SAIR =====
-        $("mostrar-cadastro-login").onclick = () => { $("formulario-login").classList.add("oculto"); $("tela-criar-conta").classList.remove("oculto"); };
-        $("mostrar-login").onclick = () => { $("tela-criar-conta").classList.add("oculto"); $("formulario-login").classList.remove("oculto"); };
-
-        $("formulario-conta").onsubmit = async (e) => {            // POST /api/auth/cadastro
-            e.preventDefault();
-            try {
-                await api("/auth/cadastro", "POST", { nome: $("conta-nome").value, usuario: $("conta-usuario").value,
-                    senha: $("conta-senha").value, perfil: $("conta-perfil").value });
-                msg("mensagem-conta", "Conta criada! Volte para o login.", "sucesso"); e.target.reset();
-            } catch (x) { msg("mensagem-conta", x.message); }
-        };
-
-        $("form-login").onsubmit = async (e) => {                  // POST /api/auth/login
-            e.preventDefault();
-            try {
-                sessao = await api("/auth/login", "POST", { usuario: $("login-usuario").value, senha: $("login-senha").value });
-                sessionStorage.setItem("sessao", JSON.stringify(sessao));
-                e.target.reset(); $("mensagem-login").className = "mensagem"; iniciar();
-            } catch (x) { msg("mensagem-login", x.message); }
-        };
-
-        $("sair").onclick = () => { sessao = null; sessionStorage.removeItem("sessao"); iniciar(); };
-
-        // Mostra login OU painel, e esconde o que o perfil não pode usar
-        function iniciar() {
-            const on = !!sessao;
-            $("tela-login").classList.toggle("oculto", on);
-            $("main").classList.toggle("oculto", !on);
-            $("usuario-logado").classList.toggle("oculto", !on);
-            $("subtitulo-cabecalho").classList.toggle("oculto", on);
-            if (!on) return;
-            $("nome-usuario").textContent = sessao.nome + " (" + sessao.perfil + ")";
-            document.querySelectorAll("[data-perfis]").forEach((el) =>
-                el.classList.toggle("oculto", !el.dataset.perfis.split(" ").includes(sessao.perfil)));
-            fechar();
-        }
-
-        // ===== ABRIR / FECHAR TELAS =====
-        function fechar() { document.querySelectorAll(".painel.ativo").forEach((p) => p.classList.remove("ativo")); }
-        function abrir(n) { fechar(); $("tela-" + n).classList.add("ativo"); if (n === "fila") carregarFila(); }
-        document.querySelectorAll("[data-abrir]").forEach((b) => b.onclick = () => abrir(b.dataset.abrir));
-        document.querySelectorAll("[data-fechar]").forEach((b) => b.onclick = fechar);
-
-        // ===== BUSCAR PACIENTE: GET /api/pacientes/{cpf} =====
-        $("form-busca").onsubmit = async (e) => {
-            e.preventDefault();
-            try {
-                const d = await api("/pacientes/" + num($("cpf-busca").value)), p = d.paciente;
-                $("resultado-busca").innerHTML = blocoPerfil(p.nome, p.cpf, p.dataNascimento, p.alergias) + "<h3>Histórico</h3>" +
-                    (d.historico.length ? d.historico.map((h) => `<div class="historico-item"><strong>${new Date(h.data).toLocaleString("pt-BR")}</strong>
-                    — ${esc(h.urgencia)} (${esc(h.status)})<br>Sintomas: ${esc(h.sintomas)}${h.diagnostico ? "<br>Diagnóstico: " + esc(h.diagnostico) : ""}
-                    ${h.prescricao ? "<br>Receita: " + esc(h.prescricao).replace(/\n/g, "<br>") : ""}</div>`).join("") : "<p class='vazio'>Nenhum atendimento anterior.</p>");
-            } catch (x) { $("resultado-busca").innerHTML = `<div class="mensagem visivel erro">${esc(x.message)}</div>`; }
-        };
-
-        // ===== CADASTRAR PACIENTE: POST /api/pacientes =====
-        $("form-cadastro").onsubmit = async (e) => {
-            e.preventDefault();
-            try {
-                await api("/pacientes", "POST", { cpf: num($("cpf-cadastro").value), nome: $("nome-cadastro").value,
-                    dataNascimento: $("nascimento-cadastro").value, alergias: $("alergias-cadastro").value });
-                msg("mensagem-cadastro", "Paciente cadastrado com sucesso.", "sucesso"); e.target.reset();
-            } catch (x) { msg("mensagem-cadastro", x.message); }
-        };
-
-        // ===== TRIAGEM: POST /api/atendimentos =====
-        // Ao completar o CPF, mostra os dados do paciente e o alerta de alergia
-        $("cpf-atendimento").addEventListener("input", async () => {
-            const cpf = num($("cpf-atendimento").value);
-            $("perfil-atendimento").innerHTML = ""; $("alerta-alergia").innerHTML = "";
-            if (cpf.length !== 11) return;
-            try {
-                const p = (await api("/pacientes/" + cpf)).paciente;
-                $("perfil-atendimento").innerHTML = blocoPerfil(p.nome, p.cpf, p.dataNascimento, p.alergias);
-                if (p.alergias !== "Nenhuma informada") $("alerta-alergia").innerHTML = `<div class="alerta">⚠ Atenção: paciente alérgico a ${esc(p.alergias)}</div>`;
-            } catch (x) { msg("mensagem-atendimento", x.message); }
-        });
-
-        $("form-atendimento").onsubmit = async (e) => {
-            e.preventDefault();
-            const risco = document.querySelector('input[name="risco"]:checked');
-            if (!risco) return msg("mensagem-atendimento", "Selecione a classificação de risco.");
-            try {
-                await api("/atendimentos", "POST", { cpf: num($("cpf-atendimento").value), sintomas: $("sintomas").value, urgencia: risco.value });
-                msg("mensagem-atendimento", "Atendimento registrado. Paciente na fila médica.", "sucesso");
-                e.target.reset(); $("perfil-atendimento").innerHTML = ""; $("alerta-alergia").innerHTML = "";
-            } catch (x) { msg("mensagem-atendimento", x.message); }
-        };
-
-        // ===== FILA MÉDICA: GET /api/atendimentos/fila =====
-        const PESO = { "Emergência": 0, "Muito Urgente": 1, "Urgente": 2, "Pouco Urgente": 3, "Não Urgente": 4 };
-
-        async function carregarFila() {
-            try { fila = await api("/atendimentos/fila"); $("mensagem-fila").className = "mensagem"; desenharFila(); }
-            catch (x) { msg("mensagem-fila", x.message); }
-        }
-        function filaOrdenada() {
-            const l = fila.filter((a) => a.status !== "Finalizado");
-            if (ordem === "prioridade") l.sort((a, b) => (PESO[a.urgencia] - PESO[b.urgencia]) || (new Date(a.data) - new Date(b.data)));
-            return l;
-        }
-        function desenharFila() {
-            $("contador-aguardando").textContent = fila.filter((a) => a.status === "Aguardando").length;
-            $("contador-atendimento").textContent = fila.filter((a) => a.status === "Em atendimento").length;
-            $("contador-finalizados").textContent = fila.filter((a) => a.status === "Finalizado").length;
-            const l = filaOrdenada();
-            $("lista-fila").innerHTML = l.length ? l.map((a) => `<div class="fila-item ${a.urgencia === "Emergência" ? "critico" : ""}">
-                <div class="fila-topo"><strong>${esc(a.nome)}</strong><span class="badge ${classeUrg(a.urgencia)}">${esc(a.urgencia)}</span></div>
-                <div class="fila-meta">CPF ${esc(a.cpf)} · ${esc(a.status)} · Espera: <span class="tempo-espera">${espera(a.data)}</span></div>
-                <div>${esc(a.sintomas)}</div>
-                <div class="acoes"><button type="button" onclick="atender(${a.id})">${a.status === "Aguardando" ? "Atender" : "Continuar"}</button></div></div>`).join("")
-                : "<p class='vazio'>Nenhum paciente na fila.</p>";
-        }
-        $("ordenar-chegada").onclick = () => { ordem = "chegada"; desenharFila(); };
-        $("ordenar-prioridade").onclick = () => { ordem = "prioridade"; desenharFila(); };
-        $("chamar-proximo").onclick = () => {
-            const p = filaOrdenada().find((a) => a.status === "Aguardando");
-            p ? atender(p.id) : msg("mensagem-fila", "Não há pacientes aguardando.");
-        };
-
-        // ===== ATENDIMENTO MÉDICO =====
-        async function atender(id) {                                // PATCH /api/atendimentos/{id}/status
-            const a = fila.find((x) => x.id === id);
-            try {
-                if (a.status === "Aguardando") { await api("/atendimentos/" + id + "/status", "PATCH", { status: "Em atendimento" }); a.status = "Em atendimento"; }
-                abrirMedico(a);
-            } catch (x) { msg("mensagem-fila", x.message); }
-        }
-        function abrirMedico(a) {
-            atual = a; abrir("medico");
-            $("form-medico").reset(); $("mensagem-medico").className = "mensagem";
-            $("lista-medicamentos").innerHTML = ""; novoMed();
-            $("titulo-atendimento-medico").textContent = a.nome;
-            $("dados-atendimento-medico").innerHTML = blocoPerfil(a.nome, a.cpf, a.dataNascimento, a.alergias);
-            $("resumo-atendimento-medico").innerHTML = `<strong>Classificação:</strong> ${esc(a.urgencia)}<br>
-                <strong>Chegada:</strong> ${new Date(a.data).toLocaleString("pt-BR")}<br><strong>Sintomas:</strong> ${esc(a.sintomas)}`;
-        }
-        $("fechar-medico").onclick = () => abrir("fila");
-
-        function novoMed() {                                        // Cada medicamento é uma linha da receita
-            const d = document.createElement("div"); d.className = "medicamento";
-            d.innerHTML = `<label>Medicamento<input class="m1"></label><label>Dose<input class="m2"></label>
-                <label>Frequência<input class="m3"></label><label>Duração<input class="m4"></label><button type="button" class="secundario">Remover</button>`;
-            d.querySelector("button").onclick = () => d.remove();
-            $("lista-medicamentos").appendChild(d);
-        }
-        $("adicionar-medicamento").onclick = novoMed;
-        const lerMeds = () => [...document.querySelectorAll(".medicamento")]
-            .map((m) => [".m1", ".m2", ".m3", ".m4"].map((c) => m.querySelector(c).value.trim()).filter(Boolean).join(" — ")).filter(Boolean);
-
-        $("form-medico").onsubmit = async (e) => {                  // PATCH /api/atendimentos/{id}/prescricao
-            e.preventDefault();
-            try {
-                await api("/atendimentos/" + atual.id + "/prescricao", "PATCH", { diagnostico: $("medico-diagnostico").value,
-                    conduta: $("medico-conduta").value, observacoes: $("medico-observacoes").value, prescricao: lerMeds().join("\n") });
-                abrir("fila"); msg("mensagem-fila", "Atendimento finalizado com sucesso.", "sucesso");
-            } catch (x) { msg("mensagem-medico", x.message); }
-        };
-
-        $("imprimir-receita").onclick = () => {                     // Preenche a área de impressão e imprime
-            const m = lerMeds();
-            if (!m.length) return msg("mensagem-medico", "Adicione ao menos um medicamento.");
-            $("impressao-paciente").textContent = "Paciente: " + atual.nome + " — CPF " + atual.cpf;
-            $("impressao-data").textContent = "Data: " + new Date().toLocaleString("pt-BR");
-            $("impressao-conteudo").innerHTML = "<ul>" + m.map((x) => "<li>" + esc(x) + "</li>").join("") + "</ul>";
-            const crm = $("medico-crm").value.trim();
-            $("impressao-medico").textContent = sessao.nome + (crm ? " — CRM " + crm : "");
-            window.print();
-        };
-
-        // Atualiza a fila sozinha a cada 30 segundos
-        setInterval(() => { if ($("tela-fila").classList.contains("ativo")) carregarFila(); }, 30000);
-
-        iniciar(); // Mostra a tela certa ao abrir a página
-    </script>
-</body>
-
-</html>
+  
