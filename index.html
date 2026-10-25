@@ -9,6 +9,73 @@
     <title>Sistema de Atendimento Clínico</title>
     <!--CSS que define o visual de todos os elementos das páginas-->
     <style>
+        .perfil {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            padding: 16px;
+            background: var(--azul-claro);
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .perfil strong,
+        .perfil span {
+            display: block;
+        }
+
+        .resumo {
+            background: #f0f8fa;
+            border: 1px solid #cde8ed;
+            border-radius: 10px;
+            padding: 18px;
+            line-height: 1.55;
+            margin: 12px 0;
+        }
+
+        .medicamento {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr 1fr 1fr auto;
+            gap: 8px;
+            align-items: end;
+            margin: 10px 0;
+        }
+
+        .impressao {
+            display: none;
+        }
+
+        @media print {
+            body>*:not(#area-impressao) {
+                display: none !important;
+            }
+
+            #area-impressao {
+                display: block !important;
+                padding: 30px;
+                color: #000;
+                font-family: Arial, sans-serif;
+            }
+
+            #area-impressao h1 {
+                color: #000;
+                font-size: 24px;
+            }
+
+            #area-impressao h2 {
+                color: #000;
+                border-bottom: 1px solid #000;
+                padding-bottom: 8px;
+            }
+
+            .assinatura {
+                margin-top: 90px;
+                border-top: 1px solid #000;
+                padding-top: 8px;
+                width: 320px;
+            }
+        }
+
         .oculto {
             display: none !important;
         }
@@ -473,13 +540,62 @@
             <div class="fila-controles">
                 <button type="button" id="ordenar-chegada">Ordem de chegada</button>
                 <button type="button" class="secundario" id="ordenar-prioridade">Por prioridade</button>
-                <button tupe="button" id="chamar-proximo">Chamar próximo</button>
+                <button type="button" id="chamar-proximo">Chamar próximo</button>
             </div>
             <div id="mensagem-fila" class="mensagem"></div>
             <!--div para o JS desenhar os cards-->
             <div id="lista-fila"></div>
         </section>
+        <!--TELA DE ATENDIMENTO MÉDICO-->
+        <section id="tela-medico" class="painel" data-perfis="medico">
+            <div class="painel-topo">
+                <div>
+                    <h2>Atendimento médico</h2>
+                    <p id="titulo-atendimento-medico"></p>
+                </div>
+                <button class="fechar" id="fechar-medico" aria-label="Voltar para a fila">x</button>
+            </div>
+            <!--Caixas preenchidas pelo JavaScript-->
+            <div id="dados-atendimento-medico"></div>
+            <div id="resumo-atendimento-medico" class="resumo"></div>
+            <form id="form-medico" class="grid-form">
+                <label>Diagnóstico
+                    <input id="medico-diagnostico" required>
+                </label>
+                <!--O CRM não é guardado no banco. Ele só serve para sair na assinatura da receita-->>
+                <label>CRM do médico
+                    <input id="medico-crm" placeholder="Usado na assinatura da receita">
+                </label>
+                <label class="campo-largo">Conduta
+                    <textarea id="medico-conduta"></textarea>
+                </label>
+                <label class="campo-largo">Observações
+                    <textarea id="medico-observacoes"></textarea>
+                </label>
+                <div class="campo-largo">
+                    <h3>Receita</h3>
+                    <!--Cada medicamento é uma linha criada pelo JavaScript-->
+                    <div id="lista-medicamentos"></div>
+                    <button type="button" class="secundario" id="adicionar-medicamento">Adicionar medicamento</button>
+                </div>
+                <div class="acoes campo-largo">
+                    <button type="submit">Finalizar atendimento</button>
+                    <button type="button" class="secundario" id="imprimir-receita">Imprimir receita</button>
+                </div>
+            </form>
+            <div id="mensagem-medico" class="mensagem"></div>
+        </section>
     </main>
+
+    <!--ÁREA DE IMPRESSÃO: invisível na tela, só aparece no papel-->
+    <section id="area-impressao" class="impressao">
+        <h1>Sistema de Atendimento Clínico</h1>
+        <h2>Receita médica</h2>
+        <p id="impressao-paciente"></p>
+        <p id="impressao-data"></p>
+        <div id="impressao-conteudo"></div>
+        <div class="assinatura">Médico: <span id="impressao-medico"></span><br>Assinatura e carimbo</div>
+    </section>
 
     <!--Biblioteca do SUPABASE-->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -900,11 +1016,6 @@
             atenderPaciente(proximo.id);
         };
 
-        //PRÓXIMO PASSO: a tela de atendimento médico ainda não existe, então por enquanto só avisa
-        const abrirAtendimentoMedico = id => {
-            mensagem("mensagem-fila", `Atendimento #${id} iniciado. A tela do médico será o próximo passo.`, "sucesso");
-        };
-
         document.getElementById("ordenar-chegada").addEventListener("click", () => definirModoFila("chegada"));
         document.getElementById("ordenar-prioridade").addEventListener("click", () => definirModoFila("prioridade"));
         document.getElementById("chamar-proximo").addEventListener("click", chamarProximo);
@@ -925,6 +1036,124 @@
             temporizadorFila = null;
             filaDados = [];
         };
+
+        //FUNÇÃO DE ATENDIMENTO MÉDICO
+        let atendimentoMedicoAtual = null; //atendimento que está aberto na tela do médico
+
+        //Dicas simples a partir de palavras nos sintomas
+        const sugestoes = sintomas => {
+            const texto = sintomas.toLowerCase();
+            const lista = [];
+            if (texto.includes("febre")) lista.push("Investigar foco infeccioso e acompanhar temperatura.");
+            if (texto.includes("peito")) lista.push("Avaliar sinais vitais e considerar investigação cardíaca imediata.");
+            if (texto.includes("falta de ar") || texto.includes("respira")) lista.push("Verificar saturação de oxigênio e padrão respiratório.");
+            if (texto.includes("dor")) lista.push("Avaliar intensidade, localização e duração da dor.");
+            if (!lista.length) lista.push("Realizar avaliação clínica completa e acompanhar a evolução dos sintomas.");
+            return lista;
+        };
+        const abrirAtendimentoMedico = id => {
+            const atendimento = filaDados.find(item => item.id === id);
+            if (!atendimento) return;
+            atendimentoMedicoAtual = atendimento;
+            const paciente = atendimento.paciente;
+
+            //limpa o que sobrou do paciente anterior
+            document.getElementById("form-medico").reset();
+            document.getElementById("lista-medicamentos").innerHTML = "";
+            document.getElementById("mensagem-medico").className = "mensagem";
+
+            //mostra a tela do médico e preenche a ficha
+            abrir("medico");
+            document.getElementById("titulo-atendimento-medico").textContent = `${paciente.nome} • ${formatarCPF(paciente.cpf)}`;
+            document.getElementById("dados-atendimento-medico").innerHTML =
+                perfilHTML(paciente)
+                + `<div class="resumo"><p><strong>Sintomas:</strong> ${atendimento.sintomas}</p><span class="badge ${riscos[atendimento.urgencia]}">${atendimento.urgencia}</span></div>`
+                + (paciente.alergias !== "Nenhuma informada" ? `<div class="mensagem visivel alerta"><strong>ALERTA DE ALERGIA:</strong> ${paciente.alergias}</div>` : "");
+            document.getElementById("resumo-atendimento-medico").innerHTML =
+                `<strong>Sugestões a partir dos sintomas:</strong><ul>${sugestoes(atendimento.sintomas).map(item => `<li>${item}</li>`).join("")}</ul>`;
+        };
+
+        //o "x" volta para a fila (fica FORA da função)
+        document.getElementById("fechar-medico").addEventListener("click", () => abrir("fila"));
+        
+        //LISTA DE MEDICAMENTOS
+        //Cria uma linha nova (nome, dose, frequência, duração) na receita
+        const adicionarMedicamento = () => {
+            const linha = document.createElement("div");
+            linha.className = "medicamento";
+            linha.innerHTML = `
+        <label>Nome<input class="med-nome"></label>
+        <label>Dose<input class="med-dose" placeholder="ex.: 500 mg"></label>
+        <label>Frequência<input class="med-frequencia" placeholder="ex.: 8 em 8 horas"></label>
+        <label>Duração<input class="med-duracao" placeholder="ex.: 5 dias"></label>
+        <button type="button" class="secundario">Remover</button>`;
+            linha.querySelector("button").onclick = () => linha.remove();
+            document.getElementById("lista-medicamentos").appendChild(linha);
+        };
+        //Lê todas as linhas e devolve uma lista de objetos (ignora linhas sem nome)
+        const medicamentosAtuais = () => [...document.querySelectorAll(".medicamento")]
+            .map(linha => ({
+                nome: linha.querySelector(".med-nome").value.trim(),
+                dose: linha.querySelector(".med-dose").value.trim(),
+                frequencia: linha.querySelector(".med-frequencia").value.trim(),
+                duracao: linha.querySelector(".med-duracao").value.trim()
+            }))
+            .filter(item => item.nome);
+
+        document.getElementById("adicionar-medicamento").addEventListener("click", adicionarMedicamento);
+        //IMPRESSÃO DE RECEITA
+        //Nenhuma biblioteca de PDF é usada. O código preenche a folha escondida e chama window.print(), e o CSS de impressão cuida do resto.
+        const imprimirReceita = () => {
+            if (!atendimentoMedicoAtual) return;
+            const medicamentos = medicamentosAtuais();
+            if (!medicamentos.length) return mensagem("mensagem-medico", "Adicione ao menos um medicamento para imprimir a receita.", "alerta");
+
+            const paciente = atendimentoMedicoAtual.paciente;
+            const crm = document.getElementById("medico-crm").value.trim() || "________________";
+            //preenche a folha invisível
+            document.getElementById("impressao-paciente").textContent = `Paciente: ${paciente.nome} | CPF: ${formatarCPF(paciente.cpf)}`;
+            document.getElementById("impressao-data").textContent = `Data: ${new Date().toLocaleDateString("pt-BR")}`;
+            document.getElementById("impressao-medico").textContent = `${usuarioAtual.nome} | CRM: ${crm}`;
+            document.getElementById("impressao-conteudo").innerHTML = medicamentos.map(item => {
+                //junta só os detalhes que foram preenchidos
+                const detalhes = [item.dose, item.frequencia, item.duracao ? `por ${item.duracao}` : ""].filter(Boolean).join("; ");
+                return `<p><strong>${item.nome}</strong>${detalhes ? " — " + detalhes : ""}.</p>`;
+            }).join("");
+
+            //abre a janela de impressão do navegador
+            window.print();
+        };
+        document.getElementById("imprimir-receita").addEventListener("click", imprimirReceita);
+        //finalizar o atendimento
+        document.getElementById("form-medico").addEventListener("submit", async evento => {
+            evento.preventDefault();
+            if (!atendimentoMedicoAtual) return;
+
+            const diagnostico = document.getElementById("medico-diagnostico").value.trim();
+            if (!diagnostico) return mensagem("mensagem-medico", "Informe o diagnóstico antes de finalizar.", "erro");
+            if (!confirm("confirmar a finalização deste atendimento?")) return;
+
+            const medicamentos = medicamentosAtuais();
+            const { error } = await clienteSupabase
+                .from("atendimentos")
+                .update({
+                    diagnostico: diagnostico,
+                    conduta: document.getElementById("medico-conduta").value.trim(),
+                    observacoes: document.getElementById("medico-observacoes").value.trim(),
+                    prescricao: JSON.stringify(medicamentos),   //a lista vira um texto, para caber numa coluna só
+                    status: "Finalizado",
+                    data_fim: new Date().toISOString()
+                })
+                .eq("id", atendimentoMedicoAtual.id);
+            if (error) return mensagem("mensagem-medico", `Não foi possível finalizar: ${error.message}`, "erro");
+
+            //imprime a receita (só se houver medicamentos) e volta para a fila
+            if (medicamentos.length) imprimirReceita();
+            atendimentoMedicoAtual = null;
+            abrir("fila");
+            await carregarFila();
+            mensagem("mensagem-fila", "Atendimento finalizado e retirado da fila.", "sucesso");
+        });
         //função que verifica o LocalStorage e chama a função entrarSistema automaticamente para manter o login
         const sessao = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
         if (sessao) entrarSistema(sessao);
