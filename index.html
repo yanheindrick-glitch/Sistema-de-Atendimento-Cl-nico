@@ -380,7 +380,7 @@
                 </label>
                 <div class="acoes"><button>Criar conta</button></div>
             </form>
-            <div id="mensagem-login" class="mensagem"></div>
+            <div id="mensagem-conta" class="mensagem"></div>
             <p class="troca autenticacao">Já possui acesso? <button type="button" id="mostrar-login">Voltar para
                     login</button></p>
         </div>
@@ -601,219 +601,377 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!--JavaScript que define a parte funcional de cada elemento-->
     <script>
-        // ===== CONFIGURAÇÃO: endereço do backend Java =====
-        const API = "http://localhost:8080/api";
-        let sessao = JSON.parse(sessionStorage.getItem("sessao") || "null"); // Usuário logado
-        let fila = [], ordem = "chegada", atual = null;                      // Fila e atendimento aberto
+  
+package com.clinica;
 
-        // ===== AUXILIARES =====
-        const $ = (id) => document.getElementById(id);
-        const num = (v) => v.replace(/\D/g, "");                              // "123.456" -> "123456"
-        const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) =>
-            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-        function msg(id, texto, tipo = "erro") { const e = $(id); e.textContent = texto; e.className = "mensagem visivel " + tipo; }
-        function idade(n) { const d = new Date(n + "T00:00:00"), h = new Date(); let a = h.getFullYear() - d.getFullYear();
-            if (h < new Date(h.getFullYear(), d.getMonth(), d.getDate())) a--; return a; }
-        const classeUrg = (u) => u.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-");
-        function espera(d) { const m = Math.max(0, Math.floor((Date.now() - new Date(d)) / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + "h " + (m % 60) + "min"; }
-        function blocoPerfil(nome, cpf, nasc, alergias) {
-            return `<div class="perfil"><div><strong>Nome</strong><span>${esc(nome)}</span></div><div><strong>CPF</strong><span>${esc(cpf)}</span></div>
-            <div><strong>Idade</strong><span>${nasc ? idade(nasc) + " anos" : "-"}</span></div><div><strong>Alergias</strong><span>${esc(alergias)}</span></div></div>`;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+/** Ponto de entrada do backend. */
+@SpringBootApplication
+public class ClinicaApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ClinicaApplication.class, args); // Inicia o servidor na porta 8080
+    }
+}
+package com.clinica.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+/** Usuário do sistema (triagem ou médico). Vira a tabela "usuarios". */
+@Entity
+@Table(name = "usuarios")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class Usuario {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;                    // ID automático
+
+    @Column(nullable = false)
+    private String nome;                // Nome completo
+
+    @Column(nullable = false, unique = true)
+    private String usuario;             // Login (único)
+
+    @Column(nullable = false)
+    private String senha;               // Senha criptografada (BCrypt)
+
+    @Column(nullable = false)
+    private String perfil;              // "triagem" ou "medico"
+}
+package com.clinica.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import java.time.LocalDate;
+
+/** Paciente. A chave primária é o próprio CPF. */
+@Entity
+@Table(name = "pacientes")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class Paciente {
+
+    @Id
+    @Column(length = 11)
+    private String cpf;                 // Só números
+
+    @Column(nullable = false)
+    private String nome;
+
+    @Column(name = "data_nascimento", nullable = false)
+    private LocalDate dataNascimento;
+
+    @Column(length = 500)
+    private String alergias;            // "Nenhuma informada" se vazio
+}
+package com.clinica.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import java.time.LocalDateTime;
+
+/** Atendimento (triagem). Status inicial: "Aguardando". */
+@Entity
+@Table(name = "atendimentos")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class Atendimento {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 11)
+    private String cpf;
+
+    @Column(nullable = false)
+    private LocalDateTime data;         // Data/hora do registro
+
+    @Column(nullable = false, length = 2000)
+    private String sintomas;
+
+    @Column(nullable = false)
+    private String urgencia;            // Emergência, Muito Urgente, etc.
+
+    @Column(nullable = false)
+    private String status;              // Aguardando / Em atendimento / Finalizado
+
+    @Column(length = 1000)
+    private String diagnostico;         // Preenchido pelo médico
+
+    @Column(length = 2000)
+    private String conduta;             // Preenchido pelo médico
+
+    @Column(length = 2000)
+    private String observacoes;         // Preenchido pelo médico
+
+    @Column(length = 2000)
+    private String prescricao;          // Receita
+}
+package com.clinica.repository;
+
+import com.clinica.entity.Usuario;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.Optional;
+
+public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
+    Optional<Usuario> findByUsuario(String usuario);
+    boolean existsByUsuario(String usuario);
+}
+package com.clinica.repository;
+
+import com.clinica.entity.Paciente;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface PacienteRepository extends JpaRepository<Paciente, String> {
+}
+package com.clinica.repository;
+
+import com.clinica.entity.Atendimento;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> {
+    List<Atendimento> findByStatusOrderByDataAsc(String status);  // Fila ordenada
+    List<Atendimento> findByCpfOrderByDataDesc(String cpf);       // Histórico do paciente
+    List<Atendimento> findAllByOrderByDataAsc();                  // Todos, por ordem de chegada
+}
+package com.clinica.service;
+
+import com.clinica.entity.Usuario;
+import com.clinica.repository.UsuarioRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+
+    private final UsuarioRepository usuarioRepository;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    // Cadastra novo usuário (criptografa a senha)
+    public Map<String, Object> cadastrar(Map<String, String> dados) {
+        String login = dados.get("usuario").toLowerCase().trim();
+
+        if (usuarioRepository.existsByUsuario(login)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Este usuário já existe.");
         }
 
-        // Máscara do CPF enquanto digita
-        ["cpf-busca", "cpf-atendimento", "cpf-cadastro"].forEach((id) => $(id).addEventListener("input", (e) => {
-            e.target.value = num(e.target.value).slice(0, 11).replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-        }));
-
-        // ===== COMUNICAÇÃO COM O JAVA (todas as telas usam esta função) =====
-        async function api(caminho, metodo = "GET", corpo = null) {
-            let r;
-            try {
-                r = await fetch(API + caminho, { method: metodo, headers: { "Content-Type": "application/json" },
-                    body: corpo ? JSON.stringify(corpo) : undefined });
-            } catch (e) { throw new Error("Não foi possível conectar ao servidor. O Java está rodando?"); }
-            let d = null; try { d = await r.json(); } catch (e) {}
-            if (!r.ok) throw new Error((d && d.message) || "Erro " + r.status);
-            return d;
+        String perfil = dados.get("perfil").toLowerCase().trim();
+        if (!perfil.equals("triagem") && !perfil.equals("medico")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Perfil inválido.");
         }
 
-        // ===== LOGIN / CRIAR CONTA / SAIR =====
-        $("mostrar-cadastro-login").onclick = () => { $("formulario-login").classList.add("oculto"); $("tela-criar-conta").classList.remove("oculto"); };
-        $("mostrar-login").onclick = () => { $("tela-criar-conta").classList.add("oculto"); $("formulario-login").classList.remove("oculto"); };
+        Usuario usuario = Usuario.builder()
+                .nome(dados.get("nome").trim())
+                .usuario(login)
+                .senha(passwordEncoder.encode(dados.get("senha"))) // BCrypt
+                .perfil(perfil)
+                .build();
 
-        $("formulario-conta").onsubmit = async (e) => {            // POST /api/auth/cadastro
-            e.preventDefault();
-            try {
-                await api("/auth/cadastro", "POST", { nome: $("conta-nome").value, usuario: $("conta-usuario").value,
-                    senha: $("conta-senha").value, perfil: $("conta-perfil").value });
-                msg("mensagem-conta", "Conta criada! Volte para o login.", "sucesso"); e.target.reset();
-            } catch (x) { msg("mensagem-conta", x.message); }
-        };
+        usuarioRepository.save(usuario);
+        return Map.of("mensagem", "Conta criada com sucesso.", "usuario", usuario.getUsuario());
+    }
 
-        $("form-login").onsubmit = async (e) => {                  // POST /api/auth/login
-            e.preventDefault();
-            try {
-                sessao = await api("/auth/login", "POST", { usuario: $("login-usuario").value, senha: $("login-senha").value });
-                sessionStorage.setItem("sessao", JSON.stringify(sessao));
-                e.target.reset(); $("mensagem-login").className = "mensagem"; iniciar();
-            } catch (x) { msg("mensagem-login", x.message); }
-        };
+    // Faz login: confere usuário e senha e devolve os dados para o HTML
+    public Map<String, Object> login(Map<String, String> dados) {
+        String login = dados.get("usuario").toLowerCase().trim();
 
-        $("sair").onclick = () => { sessao = null; sessionStorage.removeItem("sessao"); iniciar(); };
+        Usuario usuario = usuarioRepository.findByUsuario(login)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário ou senha inválidos."));
 
-        // Mostra login OU painel, e esconde o que o perfil não pode usar
-        function iniciar() {
-            const on = !!sessao;
-            $("tela-login").classList.toggle("oculto", on);
-            $("main").classList.toggle("oculto", !on);
-            $("usuario-logado").classList.toggle("oculto", !on);
-            $("subtitulo-cabecalho").classList.toggle("oculto", on);
-            if (!on) return;
-            $("nome-usuario").textContent = sessao.nome + " (" + sessao.perfil + ")";
-            document.querySelectorAll("[data-perfis]").forEach((el) =>
-                el.classList.toggle("oculto", !el.dataset.perfis.split(" ").includes(sessao.perfil)));
-            fechar();
+        if (!passwordEncoder.matches(dados.get("senha"), usuario.getSenha())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário ou senha inválidos.");
         }
 
-        // ===== ABRIR / FECHAR TELAS =====
-        function fechar() { document.querySelectorAll(".painel.ativo").forEach((p) => p.classList.remove("ativo")); }
-        function abrir(n) { fechar(); $("tela-" + n).classList.add("ativo"); if (n === "fila") carregarFila(); }
-        document.querySelectorAll("[data-abrir]").forEach((b) => b.onclick = () => abrir(b.dataset.abrir));
-        document.querySelectorAll("[data-fechar]").forEach((b) => b.onclick = fechar);
+        Map<String, Object> response = new HashMap<>();
+        response.put("nome", usuario.getNome());
+        response.put("usuario", usuario.getUsuario());
+        response.put("perfil", usuario.getPerfil());
+        return response;
+    }
+}
+package com.clinica.controller;
 
-        // ===== BUSCAR PACIENTE: GET /api/pacientes/{cpf} =====
-        $("form-busca").onsubmit = async (e) => {
-            e.preventDefault();
-            try {
-                const d = await api("/pacientes/" + num($("cpf-busca").value)), p = d.paciente;
-                $("resultado-busca").innerHTML = blocoPerfil(p.nome, p.cpf, p.dataNascimento, p.alergias) + "<h3>Histórico</h3>" +
-                    (d.historico.length ? d.historico.map((h) => `<div class="historico-item"><strong>${new Date(h.data).toLocaleString("pt-BR")}</strong>
-                    — ${esc(h.urgencia)} (${esc(h.status)})<br>Sintomas: ${esc(h.sintomas)}${h.diagnostico ? "<br>Diagnóstico: " + esc(h.diagnostico) : ""}
-                    ${h.prescricao ? "<br>Receita: " + esc(h.prescricao).replace(/\n/g, "<br>") : ""}</div>`).join("") : "<p class='vazio'>Nenhum atendimento anterior.</p>");
-            } catch (x) { $("resultado-busca").innerHTML = `<div class="mensagem visivel erro">${esc(x.message)}</div>`; }
-        };
+import com.clinica.service.AuthService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
 
-        // ===== CADASTRAR PACIENTE: POST /api/pacientes =====
-        $("form-cadastro").onsubmit = async (e) => {
-            e.preventDefault();
-            try {
-                await api("/pacientes", "POST", { cpf: num($("cpf-cadastro").value), nome: $("nome-cadastro").value,
-                    dataNascimento: $("nascimento-cadastro").value, alergias: $("alergias-cadastro").value });
-                msg("mensagem-cadastro", "Paciente cadastrado com sucesso.", "sucesso"); e.target.reset();
-            } catch (x) { msg("mensagem-cadastro", x.message); }
-        };
+import java.util.Map;
 
-        // ===== TRIAGEM: POST /api/atendimentos =====
-        // Ao completar o CPF, mostra os dados do paciente e o alerta de alergia
-        $("cpf-atendimento").addEventListener("input", async () => {
-            const cpf = num($("cpf-atendimento").value);
-            $("perfil-atendimento").innerHTML = ""; $("alerta-alergia").innerHTML = "";
-            if (cpf.length !== 11) return;
-            try {
-                const p = (await api("/pacientes/" + cpf)).paciente;
-                $("perfil-atendimento").innerHTML = blocoPerfil(p.nome, p.cpf, p.dataNascimento, p.alergias);
-                if (p.alergias !== "Nenhuma informada") $("alerta-alergia").innerHTML = `<div class="alerta">⚠ Atenção: paciente alérgico a ${esc(p.alergias)}</div>`;
-            } catch (x) { msg("mensagem-atendimento", x.message); }
-        });
+// AuthController – público
+@CrossOrigin                     // Permite o HTML chamar o Java
+@RestController
+@RequestMapping("/api/auth")
+@RequiredArgsConstructor
+public class AuthController {
 
-        $("form-atendimento").onsubmit = async (e) => {
-            e.preventDefault();
-            const risco = document.querySelector('input[name="risco"]:checked');
-            if (!risco) return msg("mensagem-atendimento", "Selecione a classificação de risco.");
-            try {
-                await api("/atendimentos", "POST", { cpf: num($("cpf-atendimento").value), sintomas: $("sintomas").value, urgencia: risco.value });
-                msg("mensagem-atendimento", "Atendimento registrado. Paciente na fila médica.", "sucesso");
-                e.target.reset(); $("perfil-atendimento").innerHTML = ""; $("alerta-alergia").innerHTML = "";
-            } catch (x) { msg("mensagem-atendimento", x.message); }
-        };
+    private final AuthService authService;
 
-        // ===== FILA MÉDICA: GET /api/atendimentos/fila =====
-        const PESO = { "Emergência": 0, "Muito Urgente": 1, "Urgente": 2, "Pouco Urgente": 3, "Não Urgente": 4 };
+    @PostMapping("/cadastro")   // Criar conta
+    public Map<String, Object> cadastro(@RequestBody Map<String, String> dados) {
+        return authService.cadastrar(dados);
+    }
 
-        async function carregarFila() {
-            try { fila = await api("/atendimentos/fila"); $("mensagem-fila").className = "mensagem"; desenharFila(); }
-            catch (x) { msg("mensagem-fila", x.message); }
+    @PostMapping("/login")      // Login
+    public Map<String, Object> login(@RequestBody Map<String, String> dados) {
+        return authService.login(dados);
+    }
+}
+package com.clinica.controller;
+
+import com.clinica.entity.Paciente;
+import com.clinica.repository.AtendimentoRepository;
+import com.clinica.repository.PacienteRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
+
+// PacienteController
+@CrossOrigin
+@RestController
+@RequestMapping("/api/pacientes")
+@RequiredArgsConstructor
+public class PacienteController {
+
+    private final PacienteRepository pacienteRepository;
+    private final AtendimentoRepository atendimentoRepository;
+
+    @GetMapping("/{cpf}")       // Buscar paciente (triagem + médico)
+    public Map<String, Object> buscar(@PathVariable String cpf) {
+        String cpfLimpo = cpf.replaceAll("\\D", "");   // Tira pontos e traço
+
+        Paciente paciente = pacienteRepository.findById(cpfLimpo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Paciente não encontrado."));
+
+        Map<String, Object> resposta = new HashMap<>();
+        resposta.put("paciente", paciente);
+        resposta.put("historico", atendimentoRepository.findByCpfOrderByDataDesc(cpfLimpo));
+        return resposta;
+    }
+
+    @PostMapping                // Cadastrar paciente (só triagem)
+    public Paciente cadastrar(@RequestBody Map<String, String> dados) {
+        String cpf = dados.get("cpf").replaceAll("\\D", "");
+
+        if (cpf.length() != 11) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O CPF deve ter 11 números.");
         }
-        function filaOrdenada() {
-            const l = fila.filter((a) => a.status !== "Finalizado");
-            if (ordem === "prioridade") l.sort((a, b) => (PESO[a.urgencia] - PESO[b.urgencia]) || (new Date(a.data) - new Date(b.data)));
-            return l;
+        if (pacienteRepository.existsById(cpf)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Paciente já cadastrado.");
         }
-        function desenharFila() {
-            $("contador-aguardando").textContent = fila.filter((a) => a.status === "Aguardando").length;
-            $("contador-atendimento").textContent = fila.filter((a) => a.status === "Em atendimento").length;
-            $("contador-finalizados").textContent = fila.filter((a) => a.status === "Finalizado").length;
-            const l = filaOrdenada();
-            $("lista-fila").innerHTML = l.length ? l.map((a) => `<div class="fila-item ${a.urgencia === "Emergência" ? "critico" : ""}">
-                <div class="fila-topo"><strong>${esc(a.nome)}</strong><span class="badge ${classeUrg(a.urgencia)}">${esc(a.urgencia)}</span></div>
-                <div class="fila-meta">CPF ${esc(a.cpf)} · ${esc(a.status)} · Espera: <span class="tempo-espera">${espera(a.data)}</span></div>
-                <div>${esc(a.sintomas)}</div>
-                <div class="acoes"><button type="button" onclick="atender(${a.id})">${a.status === "Aguardando" ? "Atender" : "Continuar"}</button></div></div>`).join("")
-                : "<p class='vazio'>Nenhum paciente na fila.</p>";
+
+        String alergias = dados.get("alergias");
+        if (alergias == null || alergias.isBlank()) alergias = "Nenhuma informada";
+
+        return pacienteRepository.save(Paciente.builder()
+                .cpf(cpf)
+                .nome(dados.get("nome").trim())
+                .dataNascimento(LocalDate.parse(dados.get("dataNascimento")))
+                .alergias(alergias.trim())
+                .build());
+    }
+}
+package com.clinica.controller;
+
+import com.clinica.entity.Atendimento;
+import com.clinica.entity.Paciente;
+import com.clinica.repository.AtendimentoRepository;
+import com.clinica.repository.PacienteRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDateTime;
+import java.util.*;
+
+// AtendimentoController
+@CrossOrigin
+@RestController
+@RequestMapping("/api/atendimentos")
+@RequiredArgsConstructor
+public class AtendimentoController {
+
+    private final AtendimentoRepository atendimentoRepository;
+    private final PacienteRepository pacienteRepository;
+
+    @PostMapping                // Registrar triagem (só triagem)
+    public Atendimento registrar(@RequestBody Map<String, String> dados) {
+        String cpf = dados.get("cpf").replaceAll("\\D", "");
+
+        if (!pacienteRepository.existsById(cpf)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Paciente não cadastrado.");
         }
-        $("ordenar-chegada").onclick = () => { ordem = "chegada"; desenharFila(); };
-        $("ordenar-prioridade").onclick = () => { ordem = "prioridade"; desenharFila(); };
-        $("chamar-proximo").onclick = () => {
-            const p = filaOrdenada().find((a) => a.status === "Aguardando");
-            p ? atender(p.id) : msg("mensagem-fila", "Não há pacientes aguardando.");
-        };
 
-        // ===== ATENDIMENTO MÉDICO =====
-        async function atender(id) {                                // PATCH /api/atendimentos/{id}/status
-            const a = fila.find((x) => x.id === id);
-            try {
-                if (a.status === "Aguardando") { await api("/atendimentos/" + id + "/status", "PATCH", { status: "Em atendimento" }); a.status = "Em atendimento"; }
-                abrirMedico(a);
-            } catch (x) { msg("mensagem-fila", x.message); }
+        return atendimentoRepository.save(Atendimento.builder()
+                .cpf(cpf)
+                .data(LocalDateTime.now())              // Hora de chegada = agora
+                .sintomas(dados.get("sintomas").trim())
+                .urgencia(dados.get("urgencia"))
+                .status("Aguardando")
+                .build());
+    }
+
+    @GetMapping("/fila")        // Ver fila (só médico)
+    public List<Map<String, Object>> fila() {
+        List<Map<String, Object>> lista = new ArrayList<>();
+
+        // Em ordem de chegada, juntando o atendimento com os dados do paciente
+        for (Atendimento a : atendimentoRepository.findAllByOrderByDataAsc()) {
+            Paciente p = pacienteRepository.findById(a.getCpf()).orElse(null);
+
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", a.getId());
+            item.put("cpf", a.getCpf());
+            item.put("nome", p != null ? p.getNome() : "Desconhecido");
+            item.put("alergias", p != null ? p.getAlergias() : "");
+            item.put("dataNascimento", p != null ? p.getDataNascimento() : null);
+            item.put("sintomas", a.getSintomas());
+            item.put("urgencia", a.getUrgencia());
+            item.put("status", a.getStatus());
+            item.put("data", a.getData());
+            lista.add(item);
         }
-        function abrirMedico(a) {
-            atual = a; abrir("medico");
-            $("form-medico").reset(); $("mensagem-medico").className = "mensagem";
-            $("lista-medicamentos").innerHTML = ""; novoMed();
-            $("titulo-atendimento-medico").textContent = a.nome;
-            $("dados-atendimento-medico").innerHTML = blocoPerfil(a.nome, a.cpf, a.dataNascimento, a.alergias);
-            $("resumo-atendimento-medico").innerHTML = `<strong>Classificação:</strong> ${esc(a.urgencia)}<br>
-                <strong>Chegada:</strong> ${new Date(a.data).toLocaleString("pt-BR")}<br><strong>Sintomas:</strong> ${esc(a.sintomas)}`;
-        }
-        $("fechar-medico").onclick = () => abrir("fila");
+        return lista;
+    }
 
-        function novoMed() {                                        // Cada medicamento é uma linha da receita
-            const d = document.createElement("div"); d.className = "medicamento";
-            d.innerHTML = `<label>Medicamento<input class="m1"></label><label>Dose<input class="m2"></label>
-                <label>Frequência<input class="m3"></label><label>Duração<input class="m4"></label><button type="button" class="secundario">Remover</button>`;
-            d.querySelector("button").onclick = () => d.remove();
-            $("lista-medicamentos").appendChild(d);
-        }
-        $("adicionar-medicamento").onclick = novoMed;
-        const lerMeds = () => [...document.querySelectorAll(".medicamento")]
-            .map((m) => [".m1", ".m2", ".m3", ".m4"].map((c) => m.querySelector(c).value.trim()).filter(Boolean).join(" — ")).filter(Boolean);
+    @PatchMapping("/{id}/status")       // Muda o status (ex.: "Em atendimento")
+    public Atendimento mudarStatus(@PathVariable Long id, @RequestBody Map<String, String> dados) {
+        Atendimento a = buscar(id);
+        a.setStatus(dados.get("status"));
+        return atendimentoRepository.save(a);
+    }
 
-        $("form-medico").onsubmit = async (e) => {                  // PATCH /api/atendimentos/{id}/prescricao
-            e.preventDefault();
-            try {
-                await api("/atendimentos/" + atual.id + "/prescricao", "PATCH", { diagnostico: $("medico-diagnostico").value,
-                    conduta: $("medico-conduta").value, observacoes: $("medico-observacoes").value, prescricao: lerMeds().join("\n") });
-                abrir("fila"); msg("mensagem-fila", "Atendimento finalizado com sucesso.", "sucesso");
-            } catch (x) { msg("mensagem-medico", x.message); }
-        };
+    @PatchMapping("/{id}/prescricao")   // Finaliza: salva diagnóstico, receita etc.
+    public Atendimento finalizar(@PathVariable Long id, @RequestBody Map<String, String> dados) {
+        Atendimento a = buscar(id);
+        a.setDiagnostico(dados.get("diagnostico"));
+        a.setConduta(dados.get("conduta"));
+        a.setObservacoes(dados.get("observacoes"));
+        a.setPrescricao(dados.get("prescricao"));
+        a.setStatus("Finalizado");
+        return atendimentoRepository.save(a);
+    }
 
-        $("imprimir-receita").onclick = () => {                     // Preenche a área de impressão e imprime
-            const m = lerMeds();
-            if (!m.length) return msg("mensagem-medico", "Adicione ao menos um medicamento.");
-            $("impressao-paciente").textContent = "Paciente: " + atual.nome + " — CPF " + atual.cpf;
-            $("impressao-data").textContent = "Data: " + new Date().toLocaleString("pt-BR");
-            $("impressao-conteudo").innerHTML = "<ul>" + m.map((x) => "<li>" + esc(x) + "</li>").join("") + "</ul>";
-            const crm = $("medico-crm").value.trim();
-            $("impressao-medico").textContent = sessao.nome + (crm ? " — CRM " + crm : "");
-            window.print();
-        };
-
-        // Atualiza a fila sozinha a cada 30 segundos
-        setInterval(() => { if ($("tela-fila").classList.contains("ativo")) carregarFila(); }, 30000);
-
-        iniciar(); // Mostra a tela certa ao abrir a página
-    </script>
-</body>
-
-</html>
+    // Auxiliar: busca o atendimento ou dá erro 404
+    private Atendimento buscar(Long id) {
+        return atendimentoRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Atendimento não encontrado."));
+    }
+}
+server.error.include-message=always
+    
